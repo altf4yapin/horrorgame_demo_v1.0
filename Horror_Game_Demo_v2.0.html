@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>EŞİK</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:Georgia,'Times New Roman',serif;color:#d8d2c8}
+canvas{display:block}
+#vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 45%,#000 120%);opacity:.5}
+#grain{position:fixed;inset:-50%;pointer-events:none;opacity:.09;animation:gr .6s steps(6) infinite}@keyframes gr{0%{transform:translate(0,0)}20%{transform:translate(-5%,3%)}40%{transform:translate(4%,-6%)}60%{transform:translate(-3%,5%)}80%{transform:translate(6%,2%)}100%{transform:translate(0,0)}}
+#flash{position:fixed;inset:0;pointer-events:none;background:#fff;opacity:0}
+#cross{position:fixed;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#fff6;pointer-events:none}
+#hint{position:fixed;left:0;right:0;top:56%;text-align:center;font-size:18px;color:#ffe9b0;text-shadow:0 0 6px #000;pointer-events:none}
+#sub{position:fixed;left:8%;right:8%;bottom:11%;text-align:center;font-size:20px;line-height:1.4;text-shadow:0 2px 6px #000;pointer-events:none;min-height:1em}
+#obj{position:fixed;left:16px;top:calc(12px + env(safe-area-inset-top,0px));font-size:14px;color:#b9b3a6;max-width:55%;text-shadow:0 0 4px #000}
+#inv{position:fixed;right:16px;top:calc(12px + env(safe-area-inset-top,0px));font-size:22px;text-align:right}
+#san{position:fixed;left:16px;bottom:16px;font-size:12px;color:#9a948a}
+#san div{width:140px;height:6px;background:#222;margin-top:4px}
+#san i{display:block;height:100%;background:#7a9cc6;width:100%}
+.ov{position:fixed;inset:0;background:#000e;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
+.ov h1{font-size:64px;letter-spacing:.4em;margin:0 0 8px;font-weight:400}
+.ov p{max-width:520px;color:#9a948a;line-height:1.5}
+.ov button{margin-top:18px;padding:12px 32px;background:none;color:#d8d2c8;border:1px solid #d8d2c8;font:inherit;font-size:18px;cursor:pointer}
+.ov button:hover{background:#d8d2c8;color:#000}
+</style></head><body>
+<div id="grain"></div><div id="vig"></div><div id="flash"></div><div id="cross"></div>
+<div id="hint"></div><div id="sub"></div><div id="obj"></div><div id="inv"></div>
+<div id="san">AKIL SAĞLIĞI<div><i id="sb"></i></div></div>
+<div class="ov" id="start"><h1>EŞİK</h1><p>Psikolojik korku · Bulmaca · Keşif<br><br>Bölüm 1: MÜHÜR<br><br>WASD / oklar: yürü · Fare: bak (tıkla, kilitlenir; kilitlenmezse basılı tutup sürükle)<br>E: etkileşim · F: fener · Kulaklıkla oynayın.</p><button id="go">Başla</button></div>
+<div class="ov" id="end" style="display:none"><h1 style="font-size:40px">BÖLÜM 3 SONU</h1><p>Üç malzeme de elinde. Hoca: «Her şeyin başladığı odaya dön. Ritüeli yap!»<br><br>Sıradaki: FİNAL — EŞİK</p></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x050508);scene.fog=new THREE.Fog(0x050508,1,13);
+const cam=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.05,50);cam.rotation.order='YXZ';scene.add(cam);
+const R=new THREE.WebGLRenderer({antialias:true});R.setSize(innerWidth,innerHeight);R.setPixelRatio(Math.min(devicePixelRatio,2));R.toneMapping=THREE.ACESFilmicToneMapping;R.toneMappingExposure=1.5;R.shadowMap.enabled=true;R.shadowMap.type=THREE.PCFSoftShadowMap;document.body.prepend(R.domElement);
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();R.setSize(innerWidth,innerHeight)});
+scene.add(new THREE.AmbientLight(0x303048,.55));
+const fl=new THREE.SpotLight(0xffeedd,1.4,12,.55,.5);fl.castShadow=true;fl.shadow.mapSize.set(1024,1024);fl.shadow.camera.near=.1;fl.penumbra=.7;cam.add(fl);cam.add(fl.target);fl.target.position.set(0,0,-1);
+const lights=[];
+function lamp(x,z,c=0xffc890,i=.7){const l=new THREE.PointLight(c,i,9);l.position.set(x,2.3,z);scene.add(l);lights.push([l,i])}
+[[-4,0],[4,0],[-4,-4],[4,-4],[-5.5,4.5],[-1,4.5],[4.5,4.5]].forEach(a=>lamp(...a));
+const W=[],I=[];
+function ctex(fn,rx,ry){const c=document.createElement('canvas');c.width=c.height=256;fn(c.getContext('2d'));const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(rx,ry);return t}
+const WT=ctex(x=>{x.fillStyle='#c8c4bc';x.fillRect(0,0,256,256);for(let i=0;i<3000;i++){x.fillStyle=`rgba(0,0,0,${Math.random()*.16})`;x.fillRect(Math.random()*256,Math.random()*256,2,2)}for(let i=0;i<256;i+=32){x.fillStyle='rgba(0,0,0,.1)';x.fillRect(i,0,3,256)}x.fillStyle='rgba(0,0,0,.35)';x.fillRect(0,236,256,20)},1,1);
+const FT=ctex(x=>{for(let r=0;r<8;r++){for(let k=0;k<2;k++){const b=40+Math.random()*30;x.fillStyle=`rgb(${b+30},${b+10},${b-10})`;x.fillRect(k*128,r*32,128,32);x.fillStyle='#0008';x.fillRect(k*128,r*32,128,2);x.fillRect(k*128,r*32,2,32)}}},8,7);
+const M=c=>new THREE.MeshStandardMaterial({color:c,roughness:.9});
+function box(x,y,z,w,h,d,c,col=false){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),M(c));m.castShadow=m.receiveShadow=true;m.position.set(x,y,z);scene.add(m);if(col)m.userData.c=addC(m,w,d);return m}
+function addC(m,w,d){const c={x1:m.position.x-w/2,x2:m.position.x+w/2,z1:m.position.z-d/2,z2:m.position.z+d/2};W.push(c);return c}
+function wall(a,b,c,d){const w=Math.max(Math.abs(c-a),.2),dd=Math.max(Math.abs(d-b),.2);box((a+c)/2,1.3,(b+d)/2,w,2.6,dd,0x3a3a42,true).material.map=WT}
+const fl2=new THREE.Mesh(new THREE.PlaneGeometry(16,14),new THREE.MeshStandardMaterial({map:FT,roughness:.6}));fl2.rotation.x=-Math.PI/2;scene.add(fl2);fl2.receiveShadow=true;const bf=fl2.clone();bf.position.x=26;scene.add(bf);
+const ce=new THREE.Mesh(new THREE.PlaneGeometry(16,14),M(0x1a1a1e));ce.rotation.x=Math.PI/2;ce.position.y=2.6;scene.add(ce);const bc=ce.clone();bc.position.x=26;scene.add(bc);
+// Dış duvarlar ve bölmeler
+wall(-8,-7,8,-7);wall(-8,7,8,7);wall(-8,-7,-8,7);wall(8,-7,8,7);
+[[-8,-4.7],[-3.3,3.3],[4.7,8]].forEach(s=>wall(s[0],-1.5,s[1],-1.5));
+[[-8,-6.2],[-4.8,-1.7],[-.3,3.8],[5.2,8]].forEach(s=>wall(s[0],1.5,s[1],1.5));
+wall(0,-7,0,-1.5);wall(-3,1.5,-3,7);wall(1,1.5,1,7);
+function tp(txt,w,h,col='#b00'){const c=document.createElement('canvas');c.width=512;c.height=128;const x=c.getContext('2d');x.fillStyle=col;x.font='bold 64px Georgia';x.textAlign='center';x.textBaseline='middle';x.fillText(txt,256,64);
+ const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),transparent:true}));scene.add(m);return m}
+function act(m,label,fn,on=()=>true){m.userData.i={label,fn,on};I.push(m);return m}
+// SALON
+box(-5,.4,-6.2,3,.8,1,0x4a3a3a,true);box(-4,.3,-4,1.4,.6,.8,0x3a2a1a,true);
+const foto=act(box(-3,.03,-3.2,.4,.05,.3,0xd9a0b0),'Elif\'in fotoğrafını al',()=>pickFoto(),()=>!F.foto);foto.rotation.y=.5;
+// YATAK ODASI
+box(-6.3,.3,4.8,1.8,.6,2.4,0x5a3a3a,true);
+const komodin=act(box(-3.45,.3,3.2,.5,.6,.5,0x4a3220,true),'Komodini aç',()=>komodinF());
+box(-7.5,.4,2.4,.6,.8,1.2,0x4a3220,true);
+const kutu=act(box(-7.5,.9,2.4,.3,.2,.3,0xc04070),'Kalp şeklindeki kutu',()=>kutuF());
+const gard=box(-4.2,1,6.7,1.6,2,.5,0x3a2a20,true);
+act(box(-4.2,.9,6.4,.4,.3,.2,0x6a5a4a),'Eski çantayı karıştır',()=>cantaF(),()=>!F.canta);
+const m1=new THREE.Mesh(new THREE.PlaneGeometry(1,1.8),new THREE.MeshStandardMaterial({color:0x889,metalness:.9,roughness:.1}));m1.position.set(-7,1.2,6.88);m1.rotation.y=Math.PI;scene.add(m1);
+// MUTFAK
+box(4,.45,-6.6,6,.9,.7,0x555560,true);box(4.5,.4,-3.8,1.6,.8,1,0x3a2a1a,true);
+const tencere=new THREE.Mesh(new THREE.CylinderGeometry(.2,.2,.2,12),M(0x777));tencere.position.set(2,1,-6.6);scene.add(tencere);
+const yazi=tp('BENİ UNUTTUN MU?',3.2,.8);yazi.position.set(4,1.7,-6.94);yazi.visible=false;
+// BANYO
+box(-1,.4,6.6,1.2,.8,.5,0x777788,true);
+const m2=new THREE.Mesh(new THREE.PlaneGeometry(1.1,1),new THREE.MeshStandardMaterial({color:0x99a,metalness:.9,roughness:.1}));m2.position.set(-1,1.6,6.88);m2.rotation.y=Math.PI;scene.add(m2);
+const krem=act(box(-1,.88,6.35,.15,.1,.15,0x80c0a0),'Yüz kremini al (anahtar içinde!)',()=>kremF(),()=>F.bath&&!F.key);krem.visible=false;
+// ÇOCUK ODASI
+box(6.5,.25,6.2,1.6,.5,1.4,0xb080a0,true);box(3,.15,4,1,.3,1,0x806090);box(6,.1,3.2,.5,.2,.5,0xc09040);
+const gitt=tp('GİT',1.6,.5);gitt.position.set(7.94,1.6,4);gitt.rotation.y=-Math.PI/2;const hain=tp('HAİN',1.6,.5);hain.position.set(4,1.7,6.94);hain.rotation.y=Math.PI;
+const ayi=act(box(4.5,.2,5,.35,.4,.3,0xa0703a),'Oyuncak ayıyı al',()=>ayiF(),()=>F.cocukOpen&&!F.ayi);
+const kapi=box(4.5,1.1,1.5,1.4,2.2,.1,0x5a4030);act(kapi,'Çocuk odasının kapısı',()=>kapiF());
+let kapiC=addC(kapi,1.4,.1);
+// DETAYLAR
+(function decor(){const E=(x,y,z,w,h,d,c)=>{const m=box(x,y,z,w,h,d,c);m.material.emissive=new THREE.Color(c);m.material.emissiveIntensity=.9;return m};
+[[-7.93,-3],[7.93,-4],[-7.93,4.5]].forEach(p=>{E(p[0],1.5,p[1],.05,1.2,1.4,0x1a2a4a);box(p[0]*.99,1.5,p[1],.08,.08,1.5,0x222);box(p[0]*.99,1.5,p[1],.08,1.3,.08,0x222)});
+[[-4,0],[4,0],[-4,-4],[4,-4],[-5.5,4.5],[-1,4.5],[4.5,4.5]].forEach(p=>E(p[0],2.52,p[1],.5,.08,.5,0xffd9a0));
+box(-4,.012,-4.5,3.2,.02,2.2,0x5a2a2a);box(-6.3,.012,4.8,2.6,.02,3.2,0x2a3a5a);box(5,.012,4,2.6,.02,2.6,0x6a4a8a);box(0,.012,0,15,.02,1.6,0x3a2a30);
+box(-5,.9,-6.65,3,.8,.25,0x5a4444);box(-6.4,.55,-6.2,.25,.3,1,0x5a4444);box(-3.6,.55,-6.2,.25,.3,1,0x5a4444);
+box(-2.5,1.6,-6.92,.7,.5,.04,0x8a7a5a);box(-7.85,1.6,-5.8,.1,1.8,.4,0x6a2a3a);box(-7.65,1.1,-2.4,.5,2.2,1.5,0x3a2a1a,true);
+box(-6.3,.65,3.8,.7,.12,.4,0xdddddd);[[3.4,-3.3],[5.6,-4.3]].forEach(p=>box(p[0],.25,p[1],.4,.5,.4,0x5a4a3a));
+box(26,2.3,-6.5,16,.15,.15,0x555560);box(26,2.3,6.5,16,.15,.15,0x555560);})();
+// SİLÜETLER
+function figure(h,c){const g=new THREE.Group(),dark=c===0,mt=(k,e)=>new THREE.MeshStandardMaterial({color:k,roughness:.9,emissive:k,emissiveIntensity:e}),sk=mt(dark?0:0xcfc8c0,.18),dr=mt(c,.14),hr=mt(0x050505,0),eye=new THREE.MeshBasicMaterial({color:dark?0xffffff:0xff2020});
+ const P=(geo,m,x,y,z,rz=0)=>{const o=new THREE.Mesh(geo,m);o.position.set(x*h,y*h,z*h);o.rotation.z=rz;o.castShadow=true;g.add(o);return o},C=(a,b,l)=>new THREE.CylinderGeometry(a*h,b*h,l*h,10),Bx=(w,l,d)=>new THREE.BoxGeometry(w*h,l*h,d*h);
+ P(C(.15,.36,.95),dr,0,.55,0);P(C(.14,.15,.42),dr,0,1.24,0);P(new THREE.SphereGeometry(.15*h,12,12),sk,0,1.58,0);
+ P(Bx(.36,.95,.1),hr,0,1.2,-.11);P(Bx(.06,.8,.24),hr,-.17,1.3,0);P(Bx(.06,.8,.24),hr,.17,1.3,0);P(Bx(.34,.16,.06),hr,0,1.72,.13);
+ P(new THREE.SphereGeometry(.02*h,6,6),eye,-.05,1.6,.145);P(new THREE.SphereGeometry(.02*h,6,6),eye,.05,1.6,.145);
+ P(C(.04,.03,.8),sk,-.24,1.0,.04,.1);P(C(.04,.03,.8),sk,.24,1.0,.04,-.1);
+ g.visible=false;scene.add(g);return g}
+const girl=figure(.6,0x9a9aaa),selin=figure(1.1,0x14141a);
+const F={};let started=false,frozen=false,san=100,yaw=-Math.PI/2,pit=0,px=-2,pz=0,flick=0,keys={},last=0,girlT=-1;
+// BÖLÜM 2 & 3
+// GÖRSEL ZENGİNLEŞTİRME
+(function(){const E=(x,y,z,w,h,d,c)=>{const m=box(x,y,z,w,h,d,c);m.material.emissive=new THREE.Color(c);m.material.emissiveIntensity=.8;return m};
+ [[-4,-1.5],[4,-1.5],[-5.5,1.5],[-1,1.5],[4.5,1.5]].forEach(p=>{box(p[0]-.75,1.1,p[1],.1,2.2,.3,0x2a1f18);box(p[0]+.75,1.1,p[1],.1,2.2,.3,0x2a1f18);box(p[0],2.35,p[1],1.6,.3,.3,0x2a1f18)});
+ [[-6.5,-1.38],[0,-1.38],[7,-1.38]].forEach(p=>{box(p[0],1.6,p[1],.7,.5,.05,0x1a1a1a);box(p[0],1.6,p[1]+.03,.58,.38,.03,0x8a7a5a)});
+ box(-.35,.4,-4,.5,.8,1.8,0x2a2a2a);E(-.25,1.1,-4,.06,.7,1.3,0x10131a);
+ box(7.5,1,-6.4,.9,2,.8,0xbbbbbb,true);box(4,1.9,-6.8,6,.7,.4,0x4a3a2a);
+ box(-2.4,.3,2.5,1,.6,.8,0xdddddd,true);box(.4,.3,6.5,.4,.6,.5,0xeeeeee,true);
+ box(-6.3,.9,6.05,1.9,.8,.1,0x3a2a20);E(-3.45,.78,3.2,.15,.2,.15,0xffd9a0);
+ box(2.5,.4,2.4,.8,.8,.6,0xd08080,true);
+ for(let i=0;i<8;i++)box(2+Math.random()*5.5,.07,2.3+Math.random()*4.4,.14,.14,.14,[0xd04040,0x4060d0,0xd0c040][i%3]).rotation.y=Math.random()*3;
+ [[7.94,1.4,3],[7.94,1.3,5.5]].forEach((p,i)=>{const d=box(p[0],p[1],p[2],.04,.5,.4,[0xd0a040,0x60a0d0][i]);d.rotation.x=.1*i});
+ [[-6.2,-3],[6.3,-4],[-6.2,4.5]].forEach((p,i)=>{const b=new THREE.Mesh(new THREE.PlaneGeometry(1.4,3.4),new THREE.MeshBasicMaterial({color:0x6688cc,transparent:true,opacity:.07,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide}));b.position.set(p[0],1.2,p[1]);b.rotation.z=i===1?-.55:.55;scene.add(b)});
+ const N=500,pa=new Float32Array(N*3);for(let i=0;i<N;i++){const bs=i%5===0;pa[i*3]=(bs?18:-8)+Math.random()*16;pa[i*3+1]=.2+Math.random()*2.2;pa[i*3+2]=-7+Math.random()*14}
+ const dg=new THREE.BufferGeometry();dg.setAttribute('position',new THREE.BufferAttribute(pa,3));window.dust=new THREE.Points(dg,new THREE.PointsMaterial({size:.03,color:0xbbaa99,transparent:true,opacity:.55}));scene.add(window.dust);
+ const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d'),d=x.createImageData(128,128);for(let i=0;i<d.data.length;i+=4){d.data[i]=d.data[i+1]=d.data[i+2]=Math.random()*255;d.data[i+3]=255}x.putImageData(d,0,0);$('grain').style.backgroundImage=`url(${c.toDataURL()})`})();
+const sl=new THREE.PointLight(0xff2020,1,5);sl.position.y=1.2;selin.add(sl);
+wall(18,-7,34,-7);wall(18,7,34,7);wall(18,-7,18,7);wall(34,-7,34,7);wall(22,-7,22,2);wall(26,7,26,-2);wall(30,-7,30,2);
+lamp(22,0,0xaa8855,.35);lamp(30,0,0xaa8855,.35);
+box(20.5,.4,5,.8,.8,.8,0x5a4a30,true);box(24,.4,-4,1,.8,1,0x5a4a30,true);box(31,.4,-3,1.2,.8,1,0x4a3a28,true);
+let P=0,K=0,mini=null,hid=false,chase=false,basement=false,dk=1;const mem=[];
+function tint(a,b){scene.traverse(o=>{if(o.isMesh&&o.material.color&&o.material.color.getHex()===a)o.material.color.set(b)})}
+const mbox=act(box(7.3,.3,3.4,.5,.3,.4,0x7a4a8a),'Müzik kutusunu çal',()=>mbF(),()=>F.ch2&&!F.mem&&!F.kirik);
+[[3,.38,4.3,'Bebeğin içine sıkışan kurma kolunu al'],[6.2,.12,2.6,'Kan lekesinin altındaki figürü al'],[7.5,.15,5.6,'Dişli parçasını al']].forEach(p=>{const m=act(box(p[0],p[1],p[2],.2,.2,.2,0xd0b060),p[3],()=>{P++;m.visible=false;say(`Müzik kutusu parçası (${P}/3)`);obj(`Müzik kutusunu onar (${P}/3)`)});m.visible=false;mem.push(m);m.userData.part=1});
+const pc1=act(box(-6.3,.67,4.2,.25,.03,.2,0xe8d8b0),'Yastığın altındaki fotoğraf parçası',()=>getPc(pc1,'Yastığın altında: «Sonsuza dek...»'),()=>F.mem);pc1.visible=false;
+const bin=act(box(1.2,.3,-6.2,.5,.6,.5,0x2a2a2a),'Çöp kutusuna uzan',()=>handF(),()=>F.mem&&!F.pc2);
+const bd=act(box(-7.85,1.1,0,.1,2.2,1.2,0x2a2a2a),'Bodruma in',()=>enterB(),()=>F.whisp&&!F.bPhoto&&!basement);
+const bag=act(box(32.5,.2,5.5,.9,.4,.6,0x6a4a2a),'Eski bavulu aç',()=>bagF(),()=>basement&&!F.bPhoto&&!hid);
+[[20,-6.3],[24,6.3],[28,-6.3]].forEach(p=>act(box(p[0],.9,p[1],1,1.8,.8,0x3a2a20,true),'Dolaba saklan',()=>{hid=true;frozen=true;say('Dolaptasın... nefesini tut. [E] ile çık.',4000)},()=>basement&&!hid&&!F.bPhoto));
+const sal=tp('BENİM EVİM',2,.5);sal.rotation.x=-Math.PI/2;sal.position.set(-3,.03,-3.2);sal.visible=false;
+function ch2(){F.ch2=true;obj('Müzik kutusunu onar (0/3)');mem.forEach(m=>{if(m.userData.part)m.visible=true});say('Köşede kızının bozuk müzik kutusu duruyor. Parçalar odaya saçılmış...',6000)}
+function mbF(){if(P<3)return say('Çalışmıyor. Parçalar eksik...');F.mem=true;melody();say('Melodi, kazadan önceki tartışmayı fısıldıyor: «Beni dinlemiyorsun!»',6000);setTimeout(memory,3500)}
+function melody(){if(!AC)return;[523,659,587,523,784,659,587,523].forEach((f,i)=>{const o=AC.createOscillator(),g=AC.createGain();o.type='triangle';o.frequency.value=f;const t=AC.currentTime+i*.45;g.gain.setValueAtTime(.12,t);g.gain.exponentialRampToValueAtTime(.001,t+.4);o.connect(g).connect(AC.destination);o.start(t);o.stop(t+.45)})}
+function memory(){scene.background.set(0x0a1208);scene.fog.color.set(0x0a1208);tint(0x3a3a42,0x2a4a3a);lights.forEach(([l])=>l.color.set(0x88ffaa));kapi.position.set(5.2,1.1,2.2);kapi.rotation.y=Math.PI/2;W.splice(W.indexOf(kapiC),1);
+ [[-4,-4],[4,-4],[-1,4],[4,0],[-5,4]].forEach(p=>mem.push(box(p[0],.02,p[1],2,.03,1.4,0x0a1a2a)));pc1.visible=true;flick=2;obj('«Kırık Aşk»: düğün fotoğrafının 2 parçasını bul (yatak odası, mutfak)');say('Duvarlar çürüyor. Hafıza koridorundasın.',5000)}
+function handF(){scare(10);say('Çürümüş bir el bileğini yakaladı! E tuşuna art arda bas!',3200);mini={n:0,t:3};frozen=true}
+function getPc(m,t){if(m)m.visible=false;K++;say(t,5000);if(K>=2)collapse()}
+function collapse(){F.kirik=true;inv();flick=3;scare(10);say('«Kırık Aşk» elde edildi — hafıza çöküyor!',4000);frozen=true;
+ setTimeout(()=>{scene.background.set(0x050508);scene.fog.color.set(0x050508);tint(0x2a4a3a,0x3a3a42);lights.forEach(([l])=>l.color.set(0xffc890));mem.forEach(m=>m.visible=false);px=-2;pz=0;yaw=-Math.PI/2;F.mem=false;frozen=false;obj('...');setTimeout(ch3,3500)},3000)}
+function ch3(){F.ch3=true;frozen=true;sting(1,50);say('Telefon — Hoca: «İyi iş. Son bir şey gerek: Elif\'in fotoğrafı. Selin onu koruyacaktır. Çok dikkatli ol.»',7500);
+ setTimeout(()=>{frozen=false;dk=.15;sal.visible=true;obj('Elif\'in fotoğrafını bul — salona bak')},8000)}
+function enterB(){basement=true;chase=true;scare(6);px=19.5;pz=0;yaw=-Math.PI/2;selin.position.set(31,0,-5.5);selin.visible=true;obj('Bavulu bul. Selin seni kovalıyor — dolaplara saklan!');say('Bodrum. Rutubet ve karanlık... Bir şey seni izliyor.',5000)}
+function bagF(){F.bPhoto=true;chase=false;selin.visible=false;inv();scare(25);say('Elif\'in fotoğrafı: bıçakla çizilmiş, gözleri oyulmuş. Selin\'in çığlığı binayı sarsıyor!',5000);frozen=true;
+ setTimeout(()=>{px=-2;pz=0;basement=false;dk=1;frozen=false;say('Hoca: «Vakit tamam. Her şeyin başladığı odaya dön. Ritüeli yap!»',6000)},4500);
+ setTimeout(()=>{F.final=true;rl.forEach(m=>m.visible=true);obj('Çocuk odasına dön — üç malzemeyle ritüeli yap')},6500)}
+// FİNAL: RİTÜEL
+const rl=[];let rit=0;
+[[5,.12,4,`Ayıyı yerleştir (Kayıp Masumiyet)`,0xa0703a,`Hakan: «Seni koruyamadım kızım... Artık huzurla uyu.»`,`BENİ BIRAKAMAZSIN!`],
+ [6.5,.12,3,`Düğün fotoğrafını yak (Kırık Aşk)`,0xe8d8b0,`Hakan: «Seni hep sevdim Selin.»`,`O KADINLA MUTLU OLAMAZSIN!`],
+ [3.5,.12,5.5,`Elif'in fotoğrafını koru (Kabul)`,0xd9a0b0,`Hakan: «Hayatım devam etmeli. Elif'i seviyorum.»`,`BU BENİM EVİM!`]].forEach(r=>{
+ const m=act(box(r[0],r[1],r[2],.5,.04,.4,r[4]),r[3],()=>ritF(m,r),()=>F.final&&!m.done&&!basement);m.visible=false;rl.push(m)});
+const sil=figure(1.5,0x000000),wl=new THREE.PointLight(0xffaa55,0,14);wl.position.set(-6,1.6,-3);scene.add(wl);
+function ritF(m,r){m.done=true;m.material.emissive.set(0x996622);rit++;scare(15);say(`«${r[6]}»  ${r[5]}`,6000);obj(`Ritüel: ${rit}/3`);
+ if(rit===1){chase=true;selin.visible=true;selin.position.set(7,0,6.5);dk=.3;tint(0x3a3a42,0x5a2a2a)}
+ if(rit===2){flick=3;san=Math.max(15,san-20);sting(1.2,45)}
+ if(rit===3)setTimeout(finale,3000)}
+function finale(){frozen=true;chase=false;scare(5);obj('');
+ setTimeout(()=>{selin.visible=false;dk=1;flick=0;san=100;tint(0x5a2a2a,0x3a3a42);say(`Hakan: «Seni hep sevdim Selin, ama artık gitmelisin. İkimiz de özgür olmalıyız.»`,5000);sting(1.5,40)},1800);
+ setTimeout(()=>{say(`Çığlık diner. Ev nefes alır. Oda aydınlanır.`,4000);scene.background.set(0xf0b070);scene.fog.color.set(0xf0b070);scene.fog.near=10;scene.fog.far=40;px=-2;pz=-3;yaw=Math.PI/2;pit=0;dk=1.5;wl.intensity=2.5},7000);
+ setTimeout(()=>say(`Hakan: «Hocam... bitti. Dediğiniz gibi oldu. Ev sakinleşti. Ruhu gitti.»`,4800),12000);
+ setTimeout(()=>say(`Hoca: «Musallat çözüldü. Ama açtığın kapıdan sadece o çıkmadı...»`,5000),17500);
+ setTimeout(()=>say(`Hoca: «Eşiği geçtin, ama kapıyı aralık bıraktın. Asıl olaylar şimdi başlıyor.»`,5500),23000);
+ setTimeout(()=>{sil.position.set(-6.8,0,-3);sil.rotation.y=Math.PI/2;sil.visible=true;sting(2,35);flick=1},29000);
+ setTimeout(()=>{$('end').innerHTML='<h1 style="font-size:56px">EŞİK</h1><p>Eşiği geçtin... ama kapıyı aralık bıraktın.<br><br>— ASIL OLAYLAR ŞİMDİ BAŞLIYOR —</p>';$('end').style.display='flex';document.exitPointerLock&&document.exitPointerLock()},34000)}
+function chapterTick(dt){window.dust.rotation.y+=dt*.01;window.dust.position.y=Math.sin(performance.now()/4000)*.1;R.domElement.style.filter=`saturate(${.6+san/250}) contrast(1.08)`+(san<25?` blur(${(25-san)/40}px)`:'');
+ if(mini){mini.t-=dt;if(mini.n>=8){mini=null;frozen=false;F.pc2=true;getPc(null,'Parçayı kurtardın! Düğün fotoğrafının ikinci parçası.')}else if(mini.t<=0){mini=null;frozen=false;scare(10);say('Elini zor kurtardın... tekrar dene.')}}
+ if(chase&&(!F.bPhoto||F.final)){const dx=px-selin.position.x,dz=pz-selin.position.z,d=Math.hypot(dx,dz)||1;
+  if(hid){const sx=31-selin.position.x,sz=-5.5-selin.position.z,e=Math.hypot(sx,sz)||1;selin.position.x+=sx/e*dt*1.2;selin.position.z+=sz/e*dt*1.2}
+  else{selin.position.x+=dx/d*1.35*dt;selin.position.z+=dz/d*1.35*dt;if(d<.9){if(!basement){scare(15);selin.position.set(7,0,6.5);return}scare(25);px=19.5;pz=0;selin.position.set(31,0,-5.5);say('Selin çığlık attı ve seni bodrumun başına attı!')}}
+  selin.rotation.y=Math.atan2(dx,dz)}}
+// SES
+let AC;function audio(){AC=new (window.AudioContext||window.webkitAudioContext)();[48,51.5].forEach(f=>{const o=AC.createOscillator(),g=AC.createGain();o.frequency.value=f;g.gain.value=.07;o.connect(g).connect(AC.destination);o.start()})}
+function sting(len=.7,lo=90){if(!AC)return;const n=AC.createBuffer(1,AC.sampleRate*len,AC.sampleRate),d=n.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2);
+ const s=AC.createBufferSource();s.buffer=n;const g=AC.createGain();g.gain.value=.5;s.connect(g).connect(AC.destination);s.start();const o=AC.createOscillator();o.type='sawtooth';o.frequency.value=lo;const g2=AC.createGain();g2.gain.setValueAtTime(.25,AC.currentTime);g2.gain.exponentialRampToValueAtTime(.001,AC.currentTime+len);o.connect(g2).connect(AC.destination);o.start();o.stop(AC.currentTime+len)}
+// UI
+let st;function say(t,ms=4800){$('sub').textContent=t;clearTimeout(st);st=setTimeout(()=>$('sub').textContent='',ms)}
+const obj=t=>$('obj').textContent='▸ '+t;
+function inv(){$('inv').textContent=(F.foto?'🖼️ ':'')+(F.key?'🗝️ ':'')+(F.cKey?'🔑 ':'')+(F.ayi?'🧸':'')+(F.kirik?'💔':'')+(F.bPhoto?'📷':'')}
+function scare(d=15){const f=$('flash');f.style.transition='none';f.style.opacity=.85;setTimeout(()=>{f.style.transition='opacity .6s';f.style.opacity=0},70);sting();san=Math.max(0,san-d);flick=1.5}
+function showSelin(x,z,ry,ms=700){selin.position.set(x,0,z);selin.rotation.y=ry;selin.visible=true;setTimeout(()=>selin.visible=false,ms)}
+// OLAYLAR
+function pickFoto(){F.foto=true;foto.visible=false;inv();say('Çerçeve kırık. Arkasında Selin\'in el yazısı: «KALBİMİ KIRDIN»  — "Kalp... mücevher kutusu."',7000);obj('Selin\'in kalp şeklindeki mücevher kutusunu bul')}
+function komodinF(){if(F.kom){say('Sadece parfüm şişesi ve solmuş bir gül.');return}F.kom=true;say('Anahtar yok. Sadece Selin\'in parfüm şişesi ve solmuş bir gül...');
+ setTimeout(()=>{scare();showSelin(-7,6.4,0);say('«Aradığın o mu?»',3500)},2200);obj('Salona dön — yere düşen fotoğrafa bak')}
+function kutuF(){if(F.kutuOpen)return say('Kutu boş.');if(!F.foto)return say('Kilitli bir kutu... Anahtarı nerede?');if(!F.key){say('Kilitli. "Anahtarı neredeydi..."');obj('Anahtarı bul — gardırobu karıştır');return}
+ F.kutuOpen=true;F.cKey=true;inv();say('İçinde çocuk odasının anahtarı ve kanlı bir not: «Neden onu koruyamadın?»',7000);obj('Çocuk odasına gir')}
+function cantaF(){F.canta=true;say('Anahtar yine yok... "Nereye koydun!" — Mutfaktan bir tencere düştü.');
+ setTimeout(()=>{sting(.4,60);tencere.position.set(2.6,.1,-4.4);yazi.visible=true},1500);obj('Mutfağa bak')}
+function kremF(){F.key=true;krem.visible=false;inv();say('İğrenerek anahtarı temizledin. Elif\'in hediyesi... Selin\'in hastalıklı bir hareketi.',6000);obj('Kalp kutusunu aç')}
+function kapiF(){if(F.cocukOpen)return;if(!F.cKey){say('Kilitli. "Anahtar... Selin\'in çekmecesinde olmalı."');if(!F.kom)obj('Selin\'in komodinini ara');return}
+ F.cocukOpen=true;kapi.position.set(5.2,1.1,2.2);kapi.rotation.y=Math.PI/2;W.splice(W.indexOf(kapiC),1);say('Oda, kaza gününden kalma gibi dağınık. Duvarlarda «GİT» ve «HAİN»...',6000);obj('"Kayıp Masumiyet" — oyuncak ayıyı al')}
+function ayiF(){F.ayi=true;ayi.visible=false;inv();frozen=true;kapi.position.set(4.5,1.1,1.5);kapi.rotation.y=0;kapiC=addC(kapi,1.4,.1);scare(25);say('Kapı arkandan şiddetle çarptı ve kilitlendi.',4000);
+ setTimeout(()=>{frozen=false;ch2()},3500)}
+function zones(){
+ if(F.ch3&&!F.whisp&&px<0&&pz<-1.5){F.whisp=true;scare(8);say('Elif\'in sesi: «Hakan, kaç buradan! Hediyeni bodruma bıraktım...» (Bu Selin\'in hilesi.)',6500);obj('Koridorun batı ucundaki bodrum kapısına git')}
+ if(F.canta&&!F.mut&&px>0&&pz<-1.5){F.mut=true;say('Buharla yazılmış: «BENİ UNUTTUN MU?» — Yüzünü yıkaman lazım.',5500);obj('Banyoya git')}
+ if(F.mut&&!F.bath&&px>-3&&px<1&&pz>1.5){F.bath=true;scare(20);m2.material.color.set(0x401015);showSelin(-1,5.6,0,900);say('Yansıman ağlayan Selin\'e dönüştü — ayna çatladı. Dolap kapağı açıldı.',6000);krem.visible=true;obj('Dolaptaki anahtarı al')}}
+// START
+function begin(){$('start').style.display='none';audio();started=true;frozen=true;obj('...');
+ const T=(t,f)=>setTimeout(f,t);
+ T(500,()=>say('Telefon — Elif: «Her şey yolunda mı, sesin bir garip?»',3500));T(4200,()=>say('Hakan: "İyiyim, yorgunum sadece."',3000));
+ T(7500,()=>{sting(.5,70);flick=2;foto.position.y=.03;say('(Salondan bir şey şiddetle yere düştü.)',3500)});
+ T(10000,()=>{girl.position.set(7.5,0,0);girl.visible=true;girlT=0;frozen=false;scare(8);obj('Çocuk odasına gir')})}
+$('go').onclick=()=>{begin();try{R.domElement.requestPointerLock()}catch(e){}};
+R.domElement.addEventListener('click',()=>{if(started&&!document.pointerLockElement)try{R.domElement.requestPointerLock()}catch(e){}});
+addEventListener('mousemove',e=>{if(!started||frozen)return;if(document.pointerLockElement||(e.buttons&1)){yaw-=e.movementX*.0025;pit=Math.max(-1.4,Math.min(1.4,pit-e.movementY*.0025))}});
+addEventListener('keydown',e=>{keys[e.code]=1;if(e.code==='KeyE')use();if(e.code==='KeyF')fl.visible=!fl.visible});
+addEventListener('keyup',e=>keys[e.code]=0);
+const ray=new THREE.Raycaster();ray.far=2.6;let cur=null;
+function look(){ray.setFromCamera({x:0,y:0},cam);const h=ray.intersectObjects(I.filter(o=>o.visible&&o.userData.i.on())).filter(x=>true)[0];cur=h?h.object:null;$('hint').textContent=cur?'[E] '+cur.userData.i.label:''}
+function use(){if(mini){mini.n++;return}if(hid){hid=false;frozen=false;return}if(started&&!frozen&&cur)cur.userData.i.fn()}
+const blocked=(x,z)=>W.some(c=>x>c.x1-.3&&x<c.x2+.3&&z>c.z1-.3&&z<c.z2+.3);
+function loop(t){requestAnimationFrame(loop);const dt=Math.min(.05,(t-last)/1000);last=t;
+ if(started){
+  chapterTick(dt);if(!frozen){const sp=2.3*(.6+.4*san/100)*dt,f=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0),r=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0);
+   const dx=(-Math.sin(yaw)*f+Math.cos(yaw)*r)*sp,dz=(-Math.cos(yaw)*f-Math.sin(yaw)*r)*sp;
+   if(!blocked(px+dx,pz))px+=dx;if(!blocked(px,pz+dz))pz+=dz;zones();look();san=Math.min(100,san+dt*1.2)}
+  cam.position.set(px,1.6-(hid?.35:0)+Math.sin(t/300)*.012,pz);cam.rotation.set(pit,yaw,Math.sin(t/700)*(1-san/100)*.05);
+  if(girlT>=0){girlT+=dt;const k=Math.min(1,girlT/3);girl.position.set(7.5-3*k,0,k*1.2);if(girlT>3.2){girl.visible=false;girlT=-1;sting(.3,60)}}
+  flick=Math.max(0,flick-dt);
+  lights.forEach(([l,i])=>l.intensity=(flick>0||san<35?i*(Math.random()<.4?.1:1):i)*dk);
+  $('sb').style.width=san+'%';$('vig').style.opacity=.5+(1-san/100)*.5}
+ R.render(scene,cam)}
+requestAnimationFrame(loop);
+</script></body></html>

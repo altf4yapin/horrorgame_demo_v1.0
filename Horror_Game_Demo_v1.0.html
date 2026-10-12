@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EŞİK - Prototip</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Chosen Palette: Korku (Çok koyu gri/mavi zemin, soluk beyaz/gri metin, vurgu için kan kırmızısı) -->
+    <!-- Application Structure Plan: Bu bir oyun prototipidir. Yapı, 'oyun dünyası' ve 'UI katmanı' olarak ikiye ayrılır. Oyun dünyası (game-screen) ana görseli ve tıklanabilir alanları (hotspot) gösterir. UI katmanı (ui-layer) envanteri, diyalogları ve sistem mesajlarını gösterir. Tüm mantık, 'gameState' adlı tek bir JavaScript nesnesi üzerinden yönetilir. -->
+    <!-- Visualization & Content Choices: Görselleştirme, metin tabanlı (paragraf açıklamaları) ve durum tabanlı HTML/CSS (CSS ile nesneleri gösterme/gizleme) ile yapılır. Gerçek 3D grafikler yerine, her 'oda' bir arka plan ve tıklanabilir alanlar olarak temsil edilir. Etkileşim (Goal: Organize/Relationships) birincil yöntemdir; envanterdeki bir öğeyi (anahtar) dünyadaki bir nesne (kutu) ile birleştirmek oyunun ilerlemesini sağlar. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111111;
+            color: #f0f0f0;
+            overflow: hidden;
+        }
+        #game-container {
+            width: 100%;
+            max-width: 1000px;
+            height: 100vh;
+            max-height: 700px;
+            margin: auto;
+            border: 2px solid #333;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+        #game-screen {
+            background-color: #000;
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background-size: cover;
+            background-position: center;
+        }
+        .hotspot {
+            position: absolute;
+            background-color: rgba(255, 255, 0, 0.2);
+            border: 2px dashed rgba(255, 255, 0, 0.5);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .hotspot:hover {
+            background-color: rgba(255, 255, 0, 0.4);
+            border: 2px solid #FFFF00;
+        }
+        
+        /* Jumpscare */
+        #jumpscare {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: black;
+            z-index: 200;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.1s;
+        }
+        #jumpscare.active {
+            display: flex;
+            opacity: 1;
+        }
+        #jumpscare-text {
+            font-family: 'Cinzel', serif;
+            font-size: 3rem;
+            color: #990000;
+            text-shadow: 0 0 10px #ff0000;
+            animation: flicker 1.5s infinite alternate;
+        }
+        @keyframes flicker {
+            0%, 18%, 22%, 25%, 53%, 57%, 100% {
+                text-shadow:
+                0 0 4px #ff0000,
+                0 0 11px #ff0000,
+                0 0 19px #ff0000,
+                0 0 40px #ff0000,
+                0 0 80px #ff0000,
+                0 0 90px #ff0000,
+                0 0 100px #ff0000,
+                0 0 150px #ff0000;
+                opacity: 1;
+            }
+            20%, 24%, 55% {        
+                text-shadow: none;
+                opacity: 0.8;
+            }
+        }
+
+        /* UI Katmanı */
+        #ui-layer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 200px;
+            background-color: rgba(10, 10, 10, 0.9);
+            border-top: 2px solid #333;
+            display: flex;
+            z-index: 100;
+        }
+        #message-box {
+            width: 70%;
+            padding: 16px;
+            border-right: 2px solid #333;
+            overflow-y: auto;
+            font-size: 0.9rem;
+            color: #ccc;
+        }
+        #message-box p {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        #message-box .thought {
+            color: #999;
+            font-style: italic;
+        }
+        #inventory-box {
+            width: 30%;
+            padding: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: flex-start;
+            overflow-y: auto;
+        }
+        .inventory-item {
+            width: 60px;
+            height: 60px;
+            background-color: #222;
+            border: 2px solid #444;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .inventory-item:hover {
+            border-color: #eee;
+            background-color: #333;
+        }
+        .inventory-item.selected {
+            border-color: #e11d48;
+            background-color: #444;
+            box-shadow: 0 0 10px #e11d48;
+        }
+        
+        /* Oda Navigasyonu */
+        #room-nav {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 8px;
+            background-color: rgba(10, 10, 10, 0.7);
+            text-align: center;
+            z-index: 50;
+        }
+        #room-nav button {
+            background: none;
+            border: 1px solid #555;
+            color: #aaa;
+            padding: 8px 16px;
+            margin: 0 5px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        #room-nav button:hover {
+            background-color: #333;
+            color: #fff;
+        }
+        #room-nav button.active {
+            background-color: #e11d48;
+            color: #fff;
+            border-color: #e11d48;
+        }
+
+        /* Başlangıç Ekranı */
+        #start-screen {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #000;
+            z-index: 300;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        #start-screen h1 {
+            font-family: 'Cinzel', serif;
+            font-size: 4rem;
+            color: #e11d48;
+            margin-bottom: 20px;
+        }
+        #start-screen p {
+            font-size: 1.1rem;
+            color: #aaa;
+            max-width: 600px;
+            margin-bottom: 40px;
+        }
+        #start-button {
+            font-family: 'Cinzel', serif;
+            font-size: 1.5rem;
+            padding: 15px 30px;
+            background-color: #e11d48;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 0 20px rgba(225, 29, 72, 0.5);
+        }
+        #start-button:hover {
+            background-color: #ff3d6a;
+            transform: scale(1.05);
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        
+        <!-- BAŞLANGIÇ EKRANI -->
+        <div id="start-screen">
+            <h1>EŞİK</h1>
+            <p>Bu, GDD'ye dayalı interaktif bir prototiptir. Tam bir oyun değildir, ancak temel atmosferi ve bulmaca mekaniklerini simüle eder. En iyi deneyim için masaüstünde görüntüleyin.</p>
+            <button id="start-button">BAŞLA</button>
+        </div>
+
+        <!-- ODA NAVİGASYONU -->
+        <div id="room-nav">
+            <button id="nav-salon" class="active">Salon</button>
+            <button id="nav-yatak-odasi">Yatak Odası</button>
+            <button id="nav-koridor">Koridor</button>
+            <button id="nav-banyo">Banyo</button>
+        </div>
+
+        <!-- JUMPSCARE EKRANI -->
+        <div id="jumpscare">
+            <div id="jumpscare-text">ARADIĞIN O MU?</div>
+        </div>
+
+        <!-- OYUN EKRANI (ODALAR) -->
+        <div id="game-screen">
+            <!-- Tıklanabilir alanlar JavaScript ile eklenecek -->
+        </div>
+
+        <!-- ARAYÜZ (MESAJLAR VE ENVANTER) -->
+        <div id="ui-layer">
+            <div id="message-box">
+                <p>Oturma odasındayım. Her şey... sessiz. Fazla sessiz.</p>
+                <p class="thought">Telefonum çaldı. Elif'ti. Sadece yorgun olduğumu söyledim... Keşke sesini duymak için daha fazla vaktim olsaydı.</p>
+            </div>
+            <div id="inventory-box">
+                <!-- Envanter öğeleri buraya eklenecek -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // --- OYUN ELEMANLARI ---
+            const gameScreen = document.getElementById('game-screen');
+            const messageBox = document.getElementById('message-box');
+            const inventoryBox = document.getElementById('inventory-box');
+            const startScreen = document.getElementById('start-screen');
+            const startButton = document.getElementById('start-button');
+            const jumpscareScreen = document.getElementById('jumpscare');
+            const roomNavButtons = {
+                salon: document.getElementById('nav-salon'),
+                yatakOdasi: document.getElementById('nav-yatak-odasi'),
+                koridor: document.getElementById('nav-koridor'),
+                banyo: document.getElementById('nav-banyo'),
+            };
+
+            // --- OYUN DURUMU (STATE) ---
+            let gameState = {
+                currentRoom: 'salon',
+                inventory: [],
+                selectedItem: null,
+                // GDD'deki ilerlemeyi takip eden bayraklar
+                telefonGorusmesiBitti: true, // Oyunu başlatıyoruz
+                elifFotografiDustu: false,
+                elifFotografiIncelendi: false,
+                kizSiluetiGoruldu: false,
+                kilitliOdaBulundu: false,
+                cekmecedeAnahtarArandi: false,
+                aynaJumpscareYasandi: false,
+                mucevherKutusuAnahtariAlindi: false,
+                mucevherKutusuAcildi: false,
+                cocukOdasiAnahtariAlindi: false
+            };
+
+            // --- ODA BİLGİLERİ VE TIKLANABİLİR ALANLAR (HOTSPOTS) ---
+            const rooms = {
+                salon: {
+                    name: 'Salon',
+                    // Placeholder resmi
+                    backgroundImage: 'url(https://placehold.co/1000x500/2a2a2a/111111?text=SALON)',
+                    hotspots: [
+                        { id: 'elif_fotografi', x: '10%', y: '60%', w: '10%', h: '20%', desc: "Elif'in fotoğrafı... Yerde." },
+                        // Diğer hotspotlar buraya eklenebilir
+                    ]
+                },
+                yatakOdasi: {
+                    name: 'Yatak Odası',
+                    backgroundImage: 'url(https://placehold.co/1000x500/2a2a2a/111111?text=YATAK+ODASI)',
+                    hotspots: [
+                        { id: 'selin_cekmecesi', x: '20%', y: '50%', w: '20%', h: '30%', desc: "Selin'in eski komodini." },
+                        { id: 'boy_aynasi', x: '70%', y: '30%', w: '15%', h: '50%', desc: 'Ayna... Sadece yansımam var.' },
+                        { id: 'mucevher_kutusu', x: '45%', y: '45%', w: '10%', h: '10%', desc: "Selin'in kalp şeklindeki kutusu." },
+                    ]
+                },
+                koridor: {
+                    name: 'Koridor',
+                    backgroundImage: 'url(https://placehold.co/1000x500/2a2a2a/111111?text=KORİDOR)',
+                    hotspots: [
+                        { id: 'cocuk_odasi_kapisi', x: '80%', y: '20%', w: '15%', h: '60%', desc: 'Kilitli oda... Kızımın odası.' },
+                    ]
+                },
+                banyo: {
+                    name: 'Banyo',
+                    backgroundImage: 'url(https://placehold.co/1000x500/2a2a2a/111111?text=BANYO)',
+                    hotspots: [
+                        { id: 'banyo_aynasi', x: '30%', y: '20%', w: '40%', h: '40%', desc: 'Yüzüm berbat görünüyor.' },
+                        { id: 'banyo_dolabi', x: '30%', y: '65%', w: '40%', h: '20%', desc: 'Dolap kapağı.' },
+                    ]
+                }
+            };
+            
+            // --- OYUN FONKSİYONLARI ---
+
+            function startGame() {
+                startScreen.style.display = 'none';
+                changeRoom('salon');
+                // GDD Adım 2: Telefon görüşmesi biter bitmez fotoğraf düşer.
+                setTimeout(triggerElifFotografiDusmesi, 2000);
+            }
+
+            function logMessage(message, type = 'normal') {
+                const p = document.createElement('p');
+                if (type === 'thought') {
+                    p.className = 'thought';
+                    p.textContent = `( ${message} )`;
+                } else if (type === 'system') {
+                    p.style.color = '#e11d48';
+                    p.style.fontWeight = 'bold';
+                    p.textContent = `[ ${message} ]`;
+                } else {
+                    p.textContent = message;
+                }
+                messageBox.appendChild(p);
+                messageBox.scrollTop = messageBox.scrollHeight;
+            }
+
+            function changeRoom(roomId) {
+                if (!rooms[roomId]) return;
+                
+                gameState.currentRoom = roomId;
+                const roomData = rooms[roomId];
+                
+                gameScreen.style.backgroundImage = roomData.backgroundImage;
+                gameScreen.innerHTML = ''; // Hotspotları temizle
+
+                // Yeni hotspotları ekle
+                roomData.hotspots.forEach(spot => {
+                    const el = document.createElement('div');
+                    el.className = 'hotspot';
+                    el.id = spot.id;
+                    el.style.left = spot.x;
+                    el.style.top = spot.y;
+                    el.style.width = spot.w;
+                    el.style.height = spot.h;
+                    el.dataset.desc = spot.desc;
+                    el.addEventListener('click', () => onHotspotClick(spot.id));
+                    gameScreen.appendChild(el);
+                });
+
+                // Navigasyon butonlarını güncelle
+                Object.values(roomNavButtons).forEach(btn => btn.classList.remove('active'));
+                if (roomId === 'salon') roomNavButtons.salon.classList.add('active');
+                if (roomId === 'yatakOdasi') roomNavButtons.yatakOdasi.classList.add('active');
+                if (roomId === 'koridor') roomNavButtons.koridor.classList.add('active');
+                if (roomId === 'banyo') roomNavButtons.banyo.classList.add('active');
+
+                logMessage(`Şimdi ${roomData.name} odasındayım.`);
+            }
+
+            function onHotspotClick(id) {
+                logMessage(`> ${id} tıklandı.`);
+
+                // Seçili envanter öğesiyle mi tıkladık?
+                if (gameState.selectedItem) {
+                    useItemOnHotspot(gameState.selectedItem, id);
+                    return;
+                }
+
+                // Normal tıklama mantığı
+                switch (id) {
+                    // --- SALON ---
+                    case 'elif_fotografi':
+                        if (gameState.elifFotografiDustu) {
+                            logMessage("Elif'in fotoğrafı... Çerçeve kırılmış.");
+                            logMessage("Arkasına bir şey yazılmış...", "thought");
+                            logMessage("[ENVANTERE EKLENDİ: Kırık Fotoğraf (İpucu)]", "system");
+                            addItemToInventory('kirik_fotograf', '🖼️');
+                            gameState.elifFotografiIncelendi = true;
+                            // GDD Adım 3: Fotoğrafı inceler incelemez silüet belirir.
+                            setTimeout(triggerKizSilueti, 1500);
+                        } else {
+                            logMessage("Elif'in fotoğrafı. Ne kadar da güzel gülüyor.");
+                        }
+                        break;
+                    
+                    // --- KORİDOR ---
+                    case 'cocuk_odasi_kapisi':
+                        if (gameState.cocukOdasiAnahtariAlindi) {
+                             logMessage("Anahtarı denemeliyim.", "thought");
+                        } else if (gameState.kizSiluetiGoruldu) {
+                            logMessage("Kızımın silüetini gördüm... Kapı kilitli! Anahtar lazım.");
+                            gameState.kilitliOdaBulundu = true;
+                        } else {
+                            logMessage("Burası artık depo gibi. Girmeme gerek yok.");
+                        }
+                        break;
+                    
+                    // --- YATAK ODASI ---
+                    case 'selin_cekmecesi':
+                        if (gameState.kilitliOdaBulundu) {
+                            logMessage("Anahtar... Selin'in çekmecesinde olmalı.");
+                            logMessage("Bakıyorum... Anahtar yok! Sadece eski parfüm şişesi ve solmuş bir gül.", "thought");
+                            gameState.cekmecedeAnahtarArandi = true;
+                            // GDD Adım 7: Çekmeceyi arar aramaz jumpscare.
+                            triggerJumpscare('boy_aynasi', 'ARADIĞIN O MU?', 1000);
+                        } else {
+                            logMessage("Selin'in eski eşyaları. Dokunmak istemiyorum.");
+                        }
+                        break;
+                    
+                    case 'boy_aynasi':
+                         if (gameState.cekmecedeAnahtarArandi) {
+                            logMessage("Az önce... bir şey mi gördüm?");
+                         } else {
+                            logMessage("Sadece yansımam.");
+                         }
+                        break;
+                    
+                    case 'mucevher_kutusu':
+                        if (gameState.mucevherKutusuAcildi) {
+                            logMessage("Kutu boş.");
+                        } else if (gameState.mucevherKutusuAnahtariAlindi) {
+                            logMessage("Bu küçük anahtar kutuya uyuyor mu?", "thought");
+                        } else if (gameState.elifFotografiIncelendi) {
+                            logMessage("Selin'in kalp şeklindeki kutusu. Kilitli. Anahtarı neredeydi...", "thought");
+                        } else {
+                            logMessage("Selin'in mücevher kutusu.");
+                        }
+                        break;
+
+                    // --- BANYO ---
+                    case 'banyo_aynasi':
+                        if (gameState.cekmecedeAnahtarArandi && !gameState.aynaJumpscareYasandi) {
+                            logMessage("Yüzümü yıkamalıyım. Bu olanlar... gerçek değil.");
+                            // GDD Adım 14: Jumpscare
+                            triggerJumpscare('banyo_aynasi', 'NEDEN ONU KORUYAMADIN?', 500, () => {
+                                logMessage("Ayna... Ayna çatladı!", "system");
+                                logMessage("Altındaki dolap... kapağı aralandı!", "thought");
+                                gameState.aynaJumpscareYasandi = true;
+                            });
+                        } else {
+                            logMessage("Yorgun görünüyorum.");
+                        }
+                        break;
+                    
+                    case 'banyo_dolabi':
+                        if (gameState.aynaJumpscareYasandi && !gameState.mucevherKutusuAnahtariAlindi) {
+                            logMessage("Dolap kapağı aralık...");
+                            logMessage("Bu da ne?! Elif'in yüz kremi... içinde... içinde küçük bir anahtar var! İğrenç!", "thought");
+                            logMessage("[ENVANTERE EKLENDİ: Küçük Anahtar]", "system");
+                            addItemToInventory('kucuk_anahtar', '🔑');
+                            gameState.mucevherKutusuAnahtariAlindi = true;
+                        } else {
+                            logMessage("Sıradan bir banyo dolabı.");
+                        }
+                        break;
+
+                    default:
+                        logMessage(document.getElementById(id).dataset.desc);
+                        break;
+                }
+            }
+            
+            function useItemOnHotspot(itemId, hotspotId) {
+                logMessage(`[${itemId}] öğesi [${hotspotId}] üzerinde kullanıldı.`);
+
+                if (itemId === 'kucuk_anahtar' && hotspotId === 'mucevher_kutusu') {
+                    if (gameState.mucevherKutusuAcildi) {
+                        logMessage("Kutu zaten açık.");
+                    } else {
+                        logMessage("Anahtar uydu! Kutu açılıyor...", "system");
+                        logMessage("İçinde... içinde başka bir anahtar var! Ve kanlı bir not...", "thought");
+                        logMessage("Notta: 'Neden onu koruyamadın?' yazıyor.", "thought");
+                        logMessage("[ENVANTERE EKLENDİ: Çocuk Odası Anahtarı]", "system");
+                        addItemToInventory('cocuk_odasi_anahtari', '🗝️');
+                        gameState.mucevherKutusuAcildi = true;
+                        gameState.cocukOdasiAnahtariAlindi = true;
+                        removeItemFromInventory('kucuk_anahtar');
+                    }
+                } 
+                else if (itemId === 'cocuk_odasi_anahtari' && hotspotId === 'cocuk_odasi_kapisi') {
+                    logMessage("Anahtar uydu... Kapıyı açıyorum.", "system");
+                    logMessage("İçerisi... kaza gününden kalma gibi dağınık. Duvarlarda 'GİT' ve 'HAİN' yazıyor.", "thought");
+                    logMessage("Odanın ortasında... kızımın oyuncağı duruyor.", "thought");
+                    logMessage("...Kapı! Kapı arkamdan kapandı! Kilitlendim!", "system");
+                    logMessage("--- BÖLİM 1 SONU ---", "system");
+                    // Oyunu burada bitiriyoruz (prototip sonu)
+                    document.getElementById('room-nav').style.display = 'none';
+                }
+                else if (itemId === 'kirik_fotograf' && hotspotId === 'mucevher_kutusu') {
+                     logMessage("Fotoğrafın arkasında 'KALBİMİ KIRDIN' yazıyor. Bu kutu da kalp şeklinde... Bu bir ipucuydu!", "thought");
+                }
+                else {
+                    logMessage("Bu işe yaramıyor.");
+                }
+
+                // Kullanımdan sonra seçimi temizle
+                deselectInventoryItem(itemId);
+            }
+
+            // --- ENVANTER FONKSİYONLARI ---
+            function addItemToInventory(id, icon) {
+                if (gameState.inventory.includes(id)) return;
+                gameState.inventory.push(id);
+                
+                const itemEl = document.createElement('div');
+                itemEl.className = 'inventory-item';
+                itemEl.id = `inv-${id}`;
+                itemEl.textContent = icon;
+                itemEl.dataset.itemId = id;
+                
+                itemEl.addEventListener('click', () => onInventoryItemClick(id));
+                
+                inventoryBox.appendChild(itemEl);
+            }
+            
+            function removeItemFromInventory(id) {
+                gameState.inventory = gameState.inventory.filter(item => item !== id);
+                const itemEl = document.getElementById(`inv-${id}`);
+                if (itemEl) {
+                    inventoryBox.removeChild(itemEl);
+                }
+            }
+
+            function onInventoryItemClick(id) {
+                const itemEl = document.getElementById(`inv-${id}`);
+                if (gameState.selectedItem === id) {
+                    // Zaten seçiliyse, seçimi kaldır
+                    deselectInventoryItem(id);
+                } else {
+                    // Değilse, önce diğerlerini bırak, sonra bunu seç
+                    if (gameState.selectedItem) {
+                        deselectInventoryItem(gameState.selectedItem);
+                    }
+                    itemEl.classList.add('selected');
+                    gameState.selectedItem = id;
+                    logMessage(`[${id}] seçildi.`, "system");
+                }
+            }
+
+            function deselectInventoryItem(id) {
+                const itemEl = document.getElementById(`inv-${id}`);
+                if (itemEl) {
+                    itemEl.classList.remove('selected');
+                }
+                if (gameState.selectedItem === id) {
+                    gameState.selectedItem = null;
+                }
+            }
+
+            // --- GDD TETİKLEYİCİLERİ ---
+            function triggerElifFotografiDusmesi() {
+                if (gameState.currentRoom === 'salon' && !gameState.elifFotografiDustu) {
+                    logMessage("GÜM! Sese bakılırsa salondan geldi.", "system");
+                    logMessage("Elif'in fotoğrafı! Yere düşmüş!", "thought");
+                    gameState.elifFotografiDustu = true;
+                    // Hotspot'u güncelle (artık tıklanabilir)
+                    const hotspot = document.getElementById('elif_fotografi');
+                    if (hotspot) {
+                        hotspot.dataset.desc = "Elif'in fotoğrafı... Yerde. Çerçevesi kırılmış.";
+                        hotspot.style.borderColor = "#e11d48";
+                        hotspot.style.borderStyle = "solid";
+                    }
+                }
+            }
+            
+            function triggerKizSilueti() {
+                 if (!gameState.kizSiluetiGoruldu) {
+                    logMessage("Bir... bir gölge mi geçti? Koridordan!", "system");
+                    logMessage("Kızımın silüeti... Kilitli odaya girdi!", "thought");
+                    gameState.kizSiluetiGoruldu = true;
+                    // Koridordaki kapı hotspot'unu güncelle
+                    const koridorKapisi = rooms.koridor.hotspots.find(h => h.id === 'cocuk_odasi_kapisi');
+                    koridorKapisi.desc = "Oraya girdi! Kapı kilitli!";
+                 }
+            }
+
+            function triggerJumpscare(hotspotId, text, duration, callback) {
+                const hotspot = document.getElementById(hotspotId);
+                if (hotspot) {
+                    hotspot.style.borderColor = "#e11d48";
+                    hotspot.style.borderStyle = "solid";
+                }
+                
+                jumpscareScreen.querySelector('#jumpscare-text').textContent = text;
+                jumpscareScreen.classList.add('active');
+
+                setTimeout(() => {
+                    jumpscareScreen.classList.remove('active');
+                    if (hotspot) {
+                        hotspot.style.borderColor = "rgba(255, 255, 0, 0.5)";
+                        hotspot.style.borderStyle = "dashed";
+                    }
+                    if (callback) {
+                        callback();
+                    }
+                }, duration);
+            }
+
+
+            // --- OYUN BAŞLANGICI VE NAVİGASYON ---
+            startButton.addEventListener('click', startGame);
+
+            roomNavButtons.salon.addEventListener('click', () => changeRoom('salon'));
+            roomNavButtons.yatakOdasi.addEventListener('click', () => changeRoom('yatakOdasi'));
+            roomNavButtons.koridor.addEventListener('click', () => changeRoom('koridor'));
+            roomNavButtons.banyo.addEventListener('click', () => changeRoom('banyo'));
+
+        });
+    </script>
+</body>
+</html>
